@@ -121,4 +121,4 @@ Real Authentication and Authorization is not implemented => not usable, as our t
 
 ## Time Spent
 
-=~ 3:30`/4 hours
+=~ 3:30/4 hours

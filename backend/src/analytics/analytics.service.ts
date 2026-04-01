@@ -40,8 +40,9 @@ export class AnalyticsService {
       ? `analytics:${storeId}:overview:${start}:${end}` //Key handle both our day/week/month or periods for caching
       : `analytics:${storeId}:overview:${period}`;
 
+    //cache check first, trying to get a cache hit
     const cached = await this.redis.get(cacheKey);
-    if (cached) {
+    if (cached) {//return immediatley aftr
       return JSON.parse(cached);
     }
 
@@ -101,7 +102,7 @@ export class AnalyticsService {
 
   async getTopProducts(storeId: string) {
     const cacheKey = `analytics:${storeId}:top-products`;
-    const cached = await this.redis.get(cacheKey);
+    const cached = await this.redis.get(cacheKey);//alsways try to get a cache hit first
     if (cached) {
       return JSON.parse(cached);
     }

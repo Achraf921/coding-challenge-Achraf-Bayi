@@ -38,6 +38,11 @@ export default function Dashboard() {
   }, [storeId]);
 
   // Compute live visitors: count page_views in last 5 min from the 20 most recent events, divide by 3
+  /* 
+  Logic is kind of whacky, we used an average of 5min sessions and three page view per users but I don't know how 
+  accurte that is to real user experience, maybe with stats about our user's time spent we could try to come up with a better aprox
+  websocket would be overkill (eats band-width) for a feture like that ok
+  */
   const estimatedLiveVisitors = Math.round(
     recentEvents.filter(
       (e) => e.event_type === "page_view" && (Date.now() - new Date(e.timestamp).getTime()) < 5 * 60 * 1000
