@@ -1,15 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-} from "recharts";
+import { useEffect, useState, useRef } from "react";
 import { getTopProducts } from "@/lib/api";
 
 interface Product {
@@ -18,124 +9,152 @@ interface Product {
   purchase_count: string;
 }
 
-const BAR_COLORS = [
-  "#3b82f6",
-  "#2563eb",
-  "#1d4ed8",
-  "#1e40af",
-  "#1e3a8a",
-  "#60a5fa",
-  "#93c5fd",
-  "#3b82f6",
-  "#2563eb",
-  "#1d4ed8",
-];
-
 export default function TopProductsChart({ storeId }: { storeId: string }) {
   const [data, setData] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const fetchProducts = (showLoading: boolean) => {
+    if (showLoading) setLoading(true);
     setError(null);
 
     getTopProducts(storeId)
       .then((res) => {
-        if (cancelled) return;
         setData(res);
         setLoading(false);
       })
       .catch((err) => {
-        if (cancelled) return;
         setError(err.message);
         setLoading(false);
       });
+  };
 
-    return () => { cancelled = true; };
+  // Here polling matches our cache's eviction policy (300s TTL) (and on mount)
+  useEffect(() => {
+    fetchProducts(true);
+    intervalRef.current = setInterval(() => fetchProducts(false), 300000);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [storeId]);
 
-  const chartData = data.map((p) => ({
-    name: p.product_id.replace("product_", "#"),
-    revenue: parseFloat(p.total_revenue),
-    count: parseInt(p.purchase_count),
-  }));
+  const maxRevenue = data.length > 0
+    ? Math.max(...data.map((p) => parseFloat(p.total_revenue)))
+    : 0;
 
   return (
-    <div
-      className="fade-in"
-      style={{
-        animationDelay: "300ms",
-        background: "var(--bg-card)",
-        border: "1px solid var(--border)",
-        borderRadius: "12px",
-        padding: "24px",
-      }}
-    >
-      <div
-        style={{
-          fontSize: "12px",
-          fontWeight: 500,
-          color: "var(--text-muted)",
-          textTransform: "uppercase",
-          letterSpacing: "0.06em",
-          marginBottom: "20px",
-        }}
-      >
-        Top 10 Products by Revenue
+    <div style={{
+      background: "#fff",
+      border: "1px solid var(--border)",
+      borderRadius: "var(--radius)",
+      overflow: "hidden",
+    }}>
+      <div style={{
+        padding: "16px 20px 12px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+      }}>
+        <span style={{
+          fontSize: "13px",
+          fontWeight: 600,
+          color: "var(--text)",
+        }}>
+          Top products
+        </span>
+        <span style={{
+          fontSize: "11px",
+          fontFamily: "'IBM Plex Mono', monospace",
+          color: "var(--text-3)",
+        }}>
+          by revenue
+        </span>
       </div>
 
       {error ? (
-        <div style={{ color: "var(--red)", fontSize: "14px", padding: "20px 0" }}>
-          Failed to load: {error}
+        <div style={{
+          fontFamily: "'IBM Plex Mono', monospace",
+          fontSize: "12px",
+          color: "var(--red)",
+          padding: "16px 20px",
+        }}>
+          err: failed to load
         </div>
       ) : loading ? (
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            height: "300px",
-          }}
-        >
+        <div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}>
           <div className="spinner" />
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={chartData} margin={{ top: 0, right: 0, left: -10, bottom: 0 }}>
-            <XAxis
-              dataKey="name"
-              tick={{ fill: "#7a8ba8", fontSize: 12, fontFamily: "'JetBrains Mono', monospace" }}
-              axisLine={{ stroke: "#1e2a3a" }}
-              tickLine={false}
-            />
-            <YAxis
-              tick={{ fill: "#4a5a74", fontSize: 11, fontFamily: "'JetBrains Mono', monospace" }}
-              axisLine={false}
-              tickLine={false}
-              tickFormatter={(v) => `$${v}`}
-            />
-            <Tooltip
-              contentStyle={{
-                background: "#1a2233",
-                border: "1px solid #1e2a3a",
-                borderRadius: "8px",
-                fontSize: "13px",
-                fontFamily: "'DM Sans', sans-serif",
-                color: "#e8ecf4",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-              }}
-              formatter={(value) => [`$${Number(value).toFixed(2)}`, "Revenue"]}
-              cursor={{ fill: "rgba(59,130,246,0.06)" }}
-            />
-            <Bar dataKey="revenue" radius={[4, 4, 0, 0]}>
-              {chartData.map((_, i) => (
-                <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+        <div>
+          {data.map((product, i) => {
+            const revenue = parseFloat(product.total_revenue);
+            const pct = maxRevenue > 0 ? (revenue / maxRevenue) * 100 : 0;
+            return (
+              <div
+                key={product.product_id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                  padding: "10px 20px",
+                  borderTop: "1px solid var(--border)",
+                  transition: "background 0.1s",
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = "#fafafa"}
+                onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+              >
+                <span style={{
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  color: i < 3 ? "var(--text)" : "var(--text-3)",
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  width: "20px",
+                  textAlign: "right",
+                }}>
+                  {i + 1}
+                </span>
+
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
+                  <div style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}>
+                    <span style={{
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "var(--text)",
+                    }}>
+                      {product.product_id.replace("product_", "Product ")}
+                    </span>
+                    <span style={{
+                      fontSize: "13px",
+                      fontWeight: 600,
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      color: "var(--text)",
+                    }}>
+                      ${revenue.toFixed(2)}
+                    </span>
+                  </div>
+                  <div style={{
+                    height: "3px",
+                    background: "#f0f0f0",
+                    borderRadius: "2px",
+                    overflow: "hidden",
+                  }}>
+                    <div style={{
+                      height: "100%",
+                      width: `${pct}%`,
+                      background: i === 0 ? "#111" : i < 3 ? "#666" : "#ccc",
+                      borderRadius: "2px",
+                      transition: "width 0.4s ease-out",
+                    }} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );

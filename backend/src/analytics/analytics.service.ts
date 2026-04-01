@@ -4,6 +4,8 @@ import Redis from 'ioredis';
 import { DATABASE_POOL } from '../database.provider';
 import { REDIS_CLIENT } from '../redis.provider';
 
+/*all of our SQL Queries/business logic is here*/
+
 @Injectable()
 export class AnalyticsService {
   constructor(
@@ -32,14 +34,28 @@ export class AnalyticsService {
     }
   }
 
-  async getOverview(storeId: string, period: string) {
-    const cacheKey = `analytics:${storeId}:overview:${period}`;
+  async getOverview(storeId: string, period?: string, start?: string, end?: string) {
+    const useCustomRange = start && end;
+    const cacheKey = useCustomRange
+      ? `analytics:${storeId}:overview:${start}:${end}` //Key handle both our day/week/month or periods for caching
+      : `analytics:${storeId}:overview:${period}`;
+
     const cached = await this.redis.get(cacheKey);
     if (cached) {
       return JSON.parse(cached);
     }
 
-    const interval = this.getInterval(period);
+    let whereClause: string;
+    let params: (string | undefined)[];
+
+    if (useCustomRange) {
+      whereClause = 'store_id = $1 AND timestamp >= $2::timestamptz AND timestamp <= $3::timestamptz';
+      params = [storeId, start, end];
+    } else {
+      const interval = this.getInterval(period || 'month');
+      whereClause = 'store_id = $1 AND timestamp >= NOW() - $2::interval';
+      params = [storeId, interval];
+    }
 
     const result = await this.pool.query(
       `SELECT
@@ -55,10 +71,17 @@ export class AnalyticsService {
        FROM (
          SELECT event_type, COUNT(*) AS count, SUM(amount) AS amount
          FROM events
-         WHERE store_id = $1 AND timestamp >= NOW() - $2::interval
+         WHERE ${whereClause}
          GROUP BY event_type
        ) sub`,
-      [storeId, interval],
+      params,
+    );
+
+    const liveResult = await this.pool.query(
+      `SELECT COUNT(*) AS view_count
+       FROM events
+       WHERE store_id = $1 AND event_type = 'page_view' AND timestamp >= NOW() - INTERVAL '5 minutes'`,
+      [storeId],
     );
 
     const row = result.rows[0];
@@ -66,8 +89,10 @@ export class AnalyticsService {
       total_revenue: parseFloat(row.total_revenue),
       events_by_type: row.events_by_type,
       conversion_rate: parseFloat(row.conversion_rate),
-      period,
+      estimated_live_visitors: Math.round(parseInt(liveResult.rows[0].view_count) / 3),
+      period: useCustomRange ? 'custom' : period,
       store_id: storeId,
+      ...(useCustomRange && { start, end }),
     };
 
     await this.redis.set(cacheKey, JSON.stringify(data), 'EX', 60);

@@ -5,6 +5,9 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 
+
+
+//guard for future multi-tenancy, (should be fetched form valid JWT token in the future)
 @Injectable()
 export class StoreIdGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {

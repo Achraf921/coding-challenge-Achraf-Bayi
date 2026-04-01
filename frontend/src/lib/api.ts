@@ -8,7 +8,10 @@ async function fetchAPI(endpoint: string, storeId: string) {
   return res.json();
 }
 
-export async function getOverview(storeId: string, period: string) {
+export async function getOverview(storeId: string, period: string, start?: string, end?: string) {
+  if (start && end) {
+    return fetchAPI(`/api/v1/analytics/overview?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`, storeId);
+  }
   return fetchAPI(`/api/v1/analytics/overview?period=${period}`, storeId);
 }
 

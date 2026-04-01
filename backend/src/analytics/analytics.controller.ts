@@ -4,14 +4,14 @@ import {
   Query,
   Req,
   UseGuards,
-  BadRequestException,
 } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
 import { StoreIdGuard } from './store-id.guard';
+import { OverviewQueryDto } from './dto/overview-query.dto';
 
 
 @Controller('api/v1/analytics')
-@UseGuards(StoreIdGuard)
+@UseGuards(StoreIdGuard) //applying guard at service level
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 
@@ -47,15 +47,12 @@ export class AnalyticsController {
   @Get('overview')
   async getOverview(
     @Req() req: any,
-    @Query('period') period?: string,
+    @Query() query: OverviewQueryDto,
   ) {
-    const validPeriods = ['today', 'week', 'month'];
-    if (period && !validPeriods.includes(period)) {
-      throw new BadRequestException(
-        'period must be one of: today, week, month',
-      );
+    if (query.start && query.end) {
+      return this.analyticsService.getOverview(req.storeId, undefined, query.start, query.end);
     }
-    return this.analyticsService.getOverview(req.storeId, period || 'month');
+    return this.analyticsService.getOverview(req.storeId, query.period || 'month');
   }
 
 
